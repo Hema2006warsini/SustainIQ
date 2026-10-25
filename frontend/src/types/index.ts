@@ -1,3 +1,11 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
@@ -5,9 +13,11 @@ export interface Organization {
   location: string;
   reporting_year: number;
   custom_metrics_schema?: Record<string, any> | null;
+  owner_id?: string;
   created_at: string;
   updated_at: string;
 }
+
 
 export interface ESGRecord {
   id: string;

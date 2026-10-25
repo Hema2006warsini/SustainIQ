@@ -1,12 +1,15 @@
 import React from 'react';
-import { ArrowRight, Activity, Award, TrendingUp, FileText } from 'lucide-react';
+import { ArrowRight, Activity, Award, TrendingUp, FileText, LogIn, UserPlus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface LandingPageProps {
   onGetStarted: () => void;
   onNavigate: (page: string) => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onNavigate }) => {
+  const { isAuthenticated, user } = useAuth();
+
   const features = [
     {
       title: 'Real-time Monitoring',
@@ -59,23 +62,55 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         </div>
 
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#087F5B', marginBottom: '16px', letterSpacing: '-0.01em' }}>
-          ESG Monitoring & Analytics
+          Smart ESG Monitoring & Analytics Platform
         </h2>
 
         <p style={{ maxWidth: '600px', margin: '0 auto 28px', fontSize: '1.05rem', color: '#475569', lineHeight: '1.6' }}>
-          Track environmental, social, and governance performance across your organization.
+          Track environmental, social, and governance performance across your organization with verified telemetry and dedicated user data isolation.
         </p>
 
-        {/* Single Primary CTA */}
-        <div>
-          <button 
-            type="button"
-            onClick={onGetStarted}
-            className="btn-primary" 
-            style={{ padding: '12px 28px', fontSize: '0.95rem', borderRadius: '8px' }}
-          >
-            Get Started <ArrowRight size={16} />
-          </button>
+        {/* Dynamic CTA based on Auth */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {isAuthenticated ? (
+            <button 
+              type="button"
+              onClick={onGetStarted}
+              className="btn-primary" 
+              style={{ padding: '12px 28px', fontSize: '0.95rem', borderRadius: '8px' }}
+            >
+              Open Dashboard ({user?.name || 'Account'}) <ArrowRight size={16} />
+            </button>
+          ) : (
+            <>
+              <button 
+                type="button"
+                onClick={() => onNavigate('register')}
+                className="btn-primary" 
+                style={{ padding: '12px 24px', fontSize: '0.95rem', borderRadius: '8px' }}
+              >
+                <UserPlus size={16} /> Create Free Account
+              </button>
+              <button 
+                type="button"
+                onClick={() => onNavigate('login')}
+                style={{ 
+                  padding: '12px 24px', 
+                  fontSize: '0.95rem', 
+                  borderRadius: '8px',
+                  background: '#FFFFFF',
+                  border: '1px solid #CBD5E1',
+                  color: '#17201C',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <LogIn size={16} /> Sign In
+              </button>
+            </>
+          )}
         </div>
       </div>
 

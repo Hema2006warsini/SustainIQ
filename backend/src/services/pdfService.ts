@@ -1,5 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { query } from '../config/database';
+import { formatOrg } from '../controllers/organizationController';
+import { formatRecord } from '../controllers/esgRecordController';
 import { ESGRecord, Organization } from '../types';
 import { aggregateScores } from './scoringService';
 
@@ -11,53 +13,43 @@ export interface ReportFilter {
 
 export async function generateEsgPdfReport(
   orgId: string,
-  filter: ReportFilter = {}
+  filter: ReportFilter = {},
+  userId?: string
 ): Promise<Buffer> {
-  // 1. Fetch Organization
-  const orgResult = await query('SELECT * FROM organizations WHERE id = $1', [orgId]);
-  if (orgResult.rows.length === 0) {
+  // 1. Fetch Organization with user ownership verification
+  const orgParams = userId ? [orgId, userId] : [orgId];
+  const orgSql = userId
+    ? 'SELECT * FROM organizations WHERE id = $1 AND owner_id = $2'
+    : 'SELECT * FROM organizations WHERE id = $1';
+
+  const orgRes = await query(orgSql, orgParams);
+  if (orgRes.rows.length === 0) {
     throw new Error('Organization not found');
   }
-  const org: Organization = orgResult.rows[0];
+  const org: Organization = formatOrg(orgRes.rows[0]);
 
   // 2. Fetch Records based on filter
-  let sql = 'SELECT * FROM esg_records WHERE organization_id = $1';
-  const params: any[] = [orgId];
+  let recSql = 'SELECT * FROM esg_records WHERE organization_id = $1';
+  const recParams: any[] = [orgId];
 
   if (filter.startDate && filter.endDate) {
-    sql += ' AND record_date >= $2 AND record_date <= $3';
-    params.push(filter.startDate, filter.endDate);
+    recParams.push(filter.startDate, filter.endDate);
+    recSql += ` AND record_date >= $${recParams.length - 1} AND record_date <= $${recParams.length}`;
   } else if (filter.startDate) {
-    sql += ' AND record_date >= $2';
-    params.push(filter.startDate);
+    recParams.push(filter.startDate);
+    recSql += ` AND record_date >= $${recParams.length}`;
   } else if (filter.endDate) {
-    sql += ' AND record_date <= $2';
-    params.push(filter.endDate);
+    recParams.push(filter.endDate);
+    recSql += ` AND record_date <= $${recParams.length}`;
   }
 
-  sql += ' ORDER BY record_date ASC';
+  recSql += ' ORDER BY record_date ASC';
 
-  const recordsResult = await query(sql, params);
-  const records: ESGRecord[] = recordsResult.rows.map(r => ({
-    ...r,
-    energy_consumption: Number(r.energy_consumption),
-    water_consumption: Number(r.water_consumption),
-    waste_generated: Number(r.waste_generated),
-    waste_recycled: Number(r.waste_recycled),
-    carbon_emissions: Number(r.carbon_emissions),
-    renewable_energy_percentage: Number(r.renewable_energy_percentage),
-    employees: Number(r.employees),
-    training_hours: Number(r.training_hours),
-    safety_incidents: Number(r.safety_incidents),
-    community_initiatives: Number(r.community_initiatives),
-    compliance_percentage: Number(r.compliance_percentage),
-    ethics_incidents: Number(r.ethics_incidents),
-    governance_score: Number(r.governance_score),
-    environmental_score: r.environmental_score ? Number(r.environmental_score) : undefined,
-    social_score: r.social_score ? Number(r.social_score) : undefined,
-    governance_score_calculated: r.governance_score_calculated ? Number(r.governance_score_calculated) : undefined,
-    overall_esg_score: r.overall_esg_score ? Number(r.overall_esg_score) : undefined,
-  }));
+  const recRes = await query(recSql, recParams);
+  const records: ESGRecord[] = recRes.rows.map(formatRecord);
+
+
+
 
   return new Promise<Buffer>((resolve, reject) => {
     try {

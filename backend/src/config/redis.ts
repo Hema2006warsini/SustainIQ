@@ -108,10 +108,36 @@ export async function invalidateCache(key: string): Promise<void> {
   memoryCache.delete(key);
 }
 
-export async function invalidateOrgCache(organizationId: string): Promise<void> {
-  const key = `dashboard:org:${organizationId}`;
-  await invalidateCache(key);
+export async function invalidateOrgCache(organizationId: string, userId?: string): Promise<void> {
+  if (userId) {
+    const userOrgKey = `dashboard:user:${userId}:org:${organizationId}`;
+    await invalidateCache(userOrgKey);
+  }
+  
+  // Also clean legacy org key
+  const legacyKey = `dashboard:org:${organizationId}`;
+  await invalidateCache(legacyKey);
+
+  // If Redis is active, scan and remove any pattern matching this organization
+  if (isRedisConnected && redisClient) {
+    try {
+      const keys = await redisClient.keys(`*org:${organizationId}*`);
+      if (keys.length > 0) {
+        await redisClient.del(...keys);
+      }
+    } catch (err) {
+      // Non-fatal
+    }
+  }
+
+  // Also remove from memoryCache
+  for (const k of memoryCache.keys()) {
+    if (k.includes(`org:${organizationId}`)) {
+      memoryCache.delete(k);
+    }
+  }
 }
+
 
 export function getCacheStats() {
   return {

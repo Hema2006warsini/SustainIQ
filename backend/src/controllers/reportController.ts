@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { generateEsgPdfReport, ReportFilter } from '../services/pdfService';
+import '../middleware/auth';
 
 export async function downloadPdfReport(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId } = req.params;
+    const userId = req.user!.id;
     const { period, startDate, endDate } = req.query;
 
     const filter: ReportFilter = {
@@ -12,7 +14,7 @@ export async function downloadPdfReport(req: Request, res: Response, next: NextF
       endDate: endDate as string | undefined,
     };
 
-    const pdfBuffer = await generateEsgPdfReport(orgId, filter);
+    const pdfBuffer = await generateEsgPdfReport(orgId, filter, userId);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="SustainIQ_ESG_Report_${orgId}.pdf"`);

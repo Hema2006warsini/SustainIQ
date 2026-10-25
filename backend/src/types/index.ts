@@ -1,13 +1,26 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
   type: string;
   location: string;
   reporting_year: number;
+  reportingYear?: number;
   custom_metrics_schema?: Record<string, any> | null;
+  customMetricsSchema?: Record<string, any> | null;
+  owner_id?: string;
+  ownerId?: string;
   created_at: string;
   updated_at: string;
 }
+
 
 export interface ESGRecord {
   id: string;

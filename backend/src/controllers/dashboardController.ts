@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import { getDatabaseStatus } from '../config/database';
 import { getCache, getCacheStats, setCache } from '../config/redis';
 import { getDashboardStats } from '../services/dashboardService';
+import '../middleware/auth';
 import { DashboardStats } from '../types';
 
 export async function getDashboard(req: Request, res: Response, next: NextFunction) {
   try {
     const { orgId } = req.params;
-    const cacheKey = `dashboard:org:${orgId}`;
+    const userId = req.user!.id;
+    const cacheKey = `dashboard:user:${userId}:org:${orgId}`;
 
     // 1. Check Redis cache
     const cachedData = await getCache<DashboardStats>(cacheKey);
@@ -18,8 +20,8 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
       });
     }
 
-    // 2. Cache MISS: query database and calculate live statistics
-    const stats = await getDashboardStats(orgId);
+    // 2. Cache MISS: query database with user ownership verification
+    const stats = await getDashboardStats(orgId, userId);
     if (!stats) {
       return res.status(404).json({ error: 'Organization not found' });
     }
@@ -47,6 +49,8 @@ export function getSystemHealth(req: Request, res: Response) {
     database: {
       type: dbStatus.type,
       connected: dbStatus.connected,
+      database: dbStatus.database,
+      host: dbStatus.host,
       policy: 'Zero Seed Data — Real Telemetry Only',
     },
     redis: {

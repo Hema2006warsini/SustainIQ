@@ -1,41 +1,30 @@
 import { query } from '../config/database';
-import { DashboardStats, ESGRecord, Organization } from '../types';
+import { formatOrg } from '../controllers/organizationController';
+import { formatRecord } from '../controllers/esgRecordController';
+import { DashboardStats, ESGRecord, Organization as OrgType } from '../types';
 import { aggregateScores, calculateRecordScores } from './scoringService';
 
-export async function getDashboardStats(orgId: string): Promise<DashboardStats | null> {
-  // 1. Fetch organization
-  const orgResult = await query('SELECT * FROM organizations WHERE id = $1', [orgId]);
-  if (orgResult.rows.length === 0) {
+export async function getDashboardStats(orgId: string, userId?: string): Promise<DashboardStats | null> {
+  // 1. Fetch organization with optional user ownership check
+  const orgParams = userId ? [orgId, userId] : [orgId];
+  const orgSql = userId
+    ? 'SELECT * FROM organizations WHERE id = $1 AND owner_id = $2'
+    : 'SELECT * FROM organizations WHERE id = $1';
+
+  const orgRes = await query(orgSql, orgParams);
+  if (orgRes.rows.length === 0) {
     return null;
   }
-  const organization: Organization = orgResult.rows[0];
+
+  const organization: OrgType = formatOrg(orgRes.rows[0]);
 
   // 2. Fetch ESG records for this organization (ordered chronologically ASC for charts)
-  const recordsResult = await query(
+  const recRes = await query(
     'SELECT * FROM esg_records WHERE organization_id = $1 ORDER BY record_date ASC',
     [orgId]
   );
-  const records: ESGRecord[] = recordsResult.rows.map(row => ({
-    ...row,
-    energy_consumption: Number(row.energy_consumption),
-    water_consumption: Number(row.water_consumption),
-    waste_generated: Number(row.waste_generated),
-    waste_recycled: Number(row.waste_recycled),
-    carbon_emissions: Number(row.carbon_emissions),
-    renewable_energy_percentage: Number(row.renewable_energy_percentage),
-    employees: Number(row.employees),
-    training_hours: Number(row.training_hours),
-    safety_incidents: Number(row.safety_incidents),
-    community_initiatives: Number(row.community_initiatives),
-    compliance_percentage: Number(row.compliance_percentage),
-    ethics_incidents: Number(row.ethics_incidents),
-    governance_score: Number(row.governance_score),
-    environmental_score: row.environmental_score ? Number(row.environmental_score) : undefined,
-    social_score: row.social_score ? Number(row.social_score) : undefined,
-    governance_score_calculated: row.governance_score_calculated ? Number(row.governance_score_calculated) : undefined,
-    overall_esg_score: row.overall_esg_score ? Number(row.overall_esg_score) : undefined,
-  }));
 
+  const records: ESGRecord[] = recRes.rows.map(formatRecord);
   const hasData = records.length > 0;
 
   if (!hasData) {
@@ -83,7 +72,7 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats |
   let totalCarbon = 0;
   let sumRenewable = 0;
 
-  records.forEach(r => {
+  records.forEach((r) => {
     totalEnergy += r.energy_consumption;
     totalWater += r.water_consumption;
     totalWasteGen += r.waste_generated;
@@ -134,33 +123,33 @@ export async function getDashboardStats(orgId: string): Promise<DashboardStats |
     }
   };
 
-  const energyOverTime = records.map(r => ({
+  const energyOverTime = records.map((r) => ({
     date: formatDateLabel(r.record_date),
     value: r.energy_consumption,
   }));
 
-  const waterOverTime = records.map(r => ({
+  const waterOverTime = records.map((r) => ({
     date: formatDateLabel(r.record_date),
     value: r.water_consumption,
   }));
 
-  const wasteComparison = records.map(r => ({
+  const wasteComparison = records.map((r) => ({
     date: formatDateLabel(r.record_date),
     generated: r.waste_generated,
     recycled: r.waste_recycled,
   }));
 
-  const carbonOverTime = records.map(r => ({
+  const carbonOverTime = records.map((r) => ({
     date: formatDateLabel(r.record_date),
     value: r.carbon_emissions,
   }));
 
-  const renewablePercentageOverTime = records.map(r => ({
+  const renewablePercentageOverTime = records.map((r) => ({
     date: formatDateLabel(r.record_date),
     value: r.renewable_energy_percentage,
   }));
 
-  const scoreTrend = records.map(r => {
+  const scoreTrend = records.map((r) => {
     const sc = calculateRecordScores(r);
     return {
       date: formatDateLabel(r.record_date),

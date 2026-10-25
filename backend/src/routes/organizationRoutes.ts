@@ -10,8 +10,12 @@ import { createRecord, getRecordsByOrg } from '../controllers/esgRecordControlle
 import { getDashboard } from '../controllers/dashboardController';
 import { downloadPdfReport } from '../controllers/reportController';
 import { validateESGRecord, validateOrganization } from '../middleware/validation';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
+
+// Protect all organization & nested ESG/dashboard routes with authentication
+router.use(requireAuth);
 
 // Organization CRUD
 router.get('/', getOrganizations);

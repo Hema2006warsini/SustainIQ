@@ -3,37 +3,40 @@
 [![Node.js](https://img.shields.io/badge/Node.js-v20+-green.svg)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-18.3-blue.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-blue.svg)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-red.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
 
-> **SustainIQ** is a genuine, full-stack Environmental, Social, and Governance (ESG) monitoring and analytics platform engineered specifically for college project demonstration and real-world multi-organization sustainability tracking.
+> **SustainIQ** is a genuine, full-stack Environmental, Social, and Governance (ESG) monitoring and analytics platform engineered for multi-tenant sustainability tracking, complete user-level data isolation, and cryptographic authentication.
 
 ---
 
-## 🌟 Core Philosophy: Zero-Mock Data Policy
+## 🌟 Core Philosophy: Zero-Mock Data Policy & Strict Data Isolation
 
 **SustainIQ contains ZERO fake data, ZERO seed data, ZERO hardcoded KPI numbers, and ZERO static ESG scores.**
 
-* When first launched, the database starts **100% empty**.
-* Dashboards initially display a clear empty state:
+* **Clean Slate Guarantee**: When a user registers a new account, they are welcomed with a clean dashboard:
   > *"No ESG data available yet. Add your first ESG record to start monitoring your organization's sustainability performance."*
-* Every KPI card, chart, ESG pillar score, table row, and PDF report is derived **dynamically and exclusively** from user-submitted operational records stored in PostgreSQL.
+* **Strict User-Level Data Isolation**: Every organization and ESG record belongs exclusively to its authenticated creator (`owner_id`). Users can only view, create, edit, and delete their own data. Changing an ID in an API request never leaks or exposes another user's organizations or telemetry.
+* **100% Dynamic Telemetry**: Every KPI card, time-series chart, ESG pillar score, table row, and PDF report is derived **dynamically and exclusively** from user-submitted operational records stored in PostgreSQL.
 
 ---
 
 ## 🏛️ Application Architecture
 
 ```
-User Browser (React 18 + Vite + Recharts + TypeScript)
-                    │
-                    ▼  (REST API / JSON / PDF Stream)
+User Browser (React 18 + TypeScript + Vite + Recharts + Lucide)
+   │  ▲
+   │  │  HTTP-Only Cookies (JWT) + CSRF Header Protection
+   ▼  │
 Express.js Backend (Node.js + TypeScript)
+   ├── Auth Middleware (JWT Token Verification + Rate Limiting + CSRF Guard)
    ├── Input Validation (Zod Schemas)
-   ├── Scoring Engine (Mathematical ESG Formulas)
+   ├── Data Authorization (Ownership verification via req.user.id)
+   ├── Transparent Scoring Engine (Mathematical ESG Formulas)
    ├── Vector PDF Generator (PDFKit Stream)
-   ├── Redis Caching Layer (ioredis: 3600s TTL + Invalidation)
-   └── Relational Storage (PostgreSQL Pool + Foreign Key Cascades)
+   ├── Redis Caching Layer (User-scoped keys: dashboard:user:{userId}:org:{orgId})
+   └── Relational Storage (PostgreSQL Pool + Foreign Key Cascades + Parameterized SQL)
 ```
 
 ---
@@ -43,9 +46,10 @@ Express.js Backend (Node.js + TypeScript)
 | Layer | Technologies |
 | :--- | :--- |
 | **Frontend** | React 18, TypeScript, Vite, Modern CSS (Deep Slate / Emerald Glassmorphism), Recharts, Lucide Icons |
-| **Backend** | Node.js, Express.js, TypeScript, Zod Validation, Helmet, CORS, PDFKit |
-| **Database** | PostgreSQL 16 (Relational tables, foreign keys, cascade deletes, chronological indexes) |
-| **Caching** | Redis 7 (Dashboard time-series caching with automatic invalidation on CRUD operations) |
+| **Backend** | Node.js, Express.js, TypeScript, Zod Validation, Helmet, CORS with credentials, cookie-parser, express-rate-limit, PDFKit |
+| **Database** | PostgreSQL 16+ (Relational tables: `users`, `organizations`, `esg_records` with foreign key cascades, indexes, JSONB) |
+| **Authentication** | Secure bcrypt password hashing (12-round salt), JWT sessions, HTTP-only SameSite cookies, CSRF tokens |
+| **Caching** | Redis 7 (User- and organization-scoped dashboard caching with automatic invalidation on CRUD operations) |
 | **Deployment** | Docker, Docker Compose multi-container configuration |
 
 ---
@@ -57,17 +61,21 @@ ESG DASHBOARD/
 ├── backend/
 │   ├── src/
 │   │   ├── config/
-│   │   │   ├── database.ts        # PostgreSQL pool + auto migrations + embedded fallback
-│   │   │   └── redis.ts           # Redis client + TTL caching + invalidation
+│   │   │   ├── database.ts        # PostgreSQL pool, schema migration, embedded standalone engine
+│   │   │   └── redis.ts           # Redis client + user-scoped TTL caching + invalidation
 │   │   ├── controllers/
-│   │   │   ├── organizationController.ts
-│   │   │   ├── esgRecordController.ts
-│   │   │   ├── dashboardController.ts
-│   │   │   └── reportController.ts
+│   │   │   ├── authController.ts          # Register, Login, Logout, /me
+│   │   │   ├── organizationController.ts  # User-owned organizations CRUD
+│   │   │   ├── esgRecordController.ts     # User-owned ESG records CRUD & scores
+│   │   │   ├── dashboardController.ts     # KPIs, charts, Redis cached stats
+│   │   │   └── reportController.ts        # Dynamic PDF reports
 │   │   ├── middleware/
+│   │   │   ├── auth.ts            # requireAuth middleware & CSRF protection
+│   │   │   ├── rateLimiter.ts     # express-rate-limit for auth endpoints
 │   │   │   ├── validation.ts      # Zod validation schemas
 │   │   │   └── errorHandler.ts    # Global error handler
 │   │   ├── routes/
+│   │   │   ├── authRoutes.ts
 │   │   │   ├── organizationRoutes.ts
 │   │   │   ├── esgRecordRoutes.ts
 │   │   │   └── index.ts
@@ -75,6 +83,10 @@ ESG DASHBOARD/
 │   │   │   ├── scoringService.ts  # Transparent ESG score calculations
 │   │   │   ├── dashboardService.ts# Aggregations, KPIs, trends
 │   │   │   └── pdfService.ts      # Vector PDF report generator
+│   │   ├── utils/
+│   │   │   └── auth.ts            # Password hashing, JWT signing/verification, cookies
+│   │   ├── scripts/
+│   │   │   └── verifyIntegration.ts # Comprehensive 23-step automated verification test suite
 │   │   ├── types/
 │   │   └── server.ts
 │   ├── Dockerfile
@@ -83,22 +95,30 @@ ESG DASHBOARD/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── layout/            # Navbar, Sidebar, Layout
+│   │   │   ├── layout/            # Navbar (with user badge & Logout), Sidebar, Layout
 │   │   │   ├── dashboard/         # KpiCard, ScoreOverview, EmptyState, ExplainerModal
 │   │   │   ├── charts/            # DashboardCharts (6 Recharts)
 │   │   │   ├── records/           # RecordFormModal, RecordTable
 │   │   │   ├── organizations/     # OrgFormModal
 │   │   │   └── common/            # DeleteConfirmModal
-│   │   ├── context/               # OrganizationContext (multi-tenant state)
-│   │   ├── pages/                 # LandingPage, DashboardPage, RecordsPage, ReportsPage, SettingsPage
-│   │   ├── services/api.ts        # REST API Client
+│   │   ├── context/
+│   │   │   ├── AuthContext.tsx         # User authentication state & session restore
+│   │   │   └── OrganizationContext.tsx # User-scoped organization state & selection
+│   │   ├── pages/
+│   │   │   ├── LoginPage.tsx           # Dedicated login page with show/hide password
+│   │   │   ├── RegisterPage.tsx        # Dedicated register page with password strength meter
+│   │   │   ├── LandingPage.tsx
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── RecordsPage.tsx
+│   │   │   ├── ReportsPage.tsx
+│   │   │   └── SettingsPage.tsx
+│   │   ├── services/api.ts        # REST API client with credentials & CSRF headers
 │   │   ├── index.css              # Modern ESG design system tokens
-│   │   ├── App.tsx
+│   │   ├── App.tsx                # Protected routes & session routing
 │   │   └── main.tsx
 │   ├── Dockerfile
 │   ├── nginx.conf
-│   ├── package.json
-│   └── vite.config.ts
+│   └── package.json
 ├── docker-compose.yml             # Orchestrates postgres, redis, backend, and frontend
 ├── .env.example
 └── README.md
@@ -111,9 +131,9 @@ ESG DASHBOARD/
 SustainIQ computes all sustainability scores through verifiable mathematical formulations without black-box estimations:
 
 ### 1. Environmental Score (0 – 100) — Weight: 40%
-* **Renewable Energy (30%)**: Directly represents the clean energy share $[0, 100]\%$.
+* **Renewable Energy (30%)**: Clean energy share $[0, 100]\%$.
 * **Recycling Rate (30%)**: $\min\left(100, \frac{\text{Waste Recycled}}{\text{Waste Generated}} \times 100\right)$.
-* **Carbon Efficiency (20%)**: Evaluates $\text{CO}_2\text{e}$ emissions per employee against industrial monthly benchmarks.
+* **Carbon Efficiency (20%)**: Evaluates $\text{CO}_2\text{e}$ emissions per employee against industrial benchmarks.
 * **Energy Efficiency (20%)**: Evaluates $\text{kWh}$ consumption per employee.
 
 $$\text{Env Score} = (0.30 \times \text{Renewable}) + (0.30 \times \text{Recycling}) + (0.20 \times \text{Carbon Factor}) + (0.20 \times \text{Energy Factor})$$
@@ -141,33 +161,50 @@ $$\text{Overall ESG Score} = (\text{Env Score} \times 0.40) + (\text{Soc Score} 
 
 ## ⚡ Redis Caching & Invalidation Architecture
 
-To demonstrate enterprise high-performance caching:
-1. **Query Request**: When the dashboard requests telemetry for an organization (`GET /api/organizations/:id/dashboard`), the backend inspects Redis at key `dashboard:org:{orgId}`.
-2. **Cache HIT**: If present, the cached statistics and chart arrays are returned instantly (`cacheStatus: "HIT"`).
-3. **Cache MISS**: If missing, PostgreSQL is queried, metrics are computed, cached in Redis for 3600 seconds, and returned (`cacheStatus: "MISS"`).
-4. **Instant Invalidation**: Whenever an ESG record is **added**, **edited**, or **deleted** (or the organization profile is updated), the backend immediately invalidates the cache key `dashboard:org:{orgId}`. The very next request fetches live database data and recalculates scores.
-5. **Live Diagnostics**: The top navbar and the System Diagnostics page display real-time cache hits, misses, and invalidations.
+1. **User-Scoped Keying**: Cache keys explicitly incorporate both the authenticated user ID and organization ID:
+   ```
+   dashboard:user:{userId}:org:{organizationId}
+   ```
+   This strictly guarantees that cached data for one user is never leaked to another user.
+2. **Cache HIT / MISS**: Cached dashboard telemetry returns with `cacheStatus: "HIT"`. If missing, PostgreSQL calculates live statistics and caches the result for 3600 seconds (`cacheStatus: "MISS"`).
+3. **Instant Invalidation**: Whenever an organization or ESG record is created, edited, or deleted, `invalidateOrgCache(orgId, userId)` clears the respective cache keys immediately.
+
+---
+
+## 🔐 Authentication & Security
+
+* **Separate Login and Registration Pages**: Fully responsive interfaces designed with the SustainIQ emerald visual theme.
+* **Registration Page**: Full name, email format validation, password strength meter (Weak/Moderate/Strong), and matching password validation.
+* **Login Page**: Work email, password with show/hide control, clear invalid-credentials messaging.
+* **Session Management**: Secure HTTP-only SameSite cookies prevent XSS credential theft. JWT token authorization works with both cookies and `Authorization: Bearer <token>` headers.
+* **CSRF Protection**: Double-submit cookie verification and anti-CSRF request header validation on state-changing requests (`POST`, `PUT`, `DELETE`).
+* **Rate Limiting**: Brute-force protection on `/api/auth/login` and `/api/auth/register` via `express-rate-limit`.
+* **Logout**: Clears authentication cookies and redirects the user immediately to the Login page.
+
+---
+
+## 📦 PostgreSQL Configuration
+
+### Local Development / Standalone
+SustainIQ is configured to connect to PostgreSQL via `DATABASE_URL`:
+```bash
+DATABASE_URL=postgresql://postgres:postgrespassword@localhost:5432/sustainiq
+```
+If PostgreSQL is not running as a local Windows service or Docker container, the backend will automatically spin up its embedded PostgreSQL engine on port 5432 with persistent disk storage in `backend/data/db`. No manual DB installation is required for local testing.
+
+### Docker Compose
+When running via Docker Compose, PostgreSQL 16 runs in a dedicated container:
+```bash
+DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/sustainiq
+```
 
 ---
 
 ## 🚀 How to Run the Application
 
-### Option A: Using Docker Compose (Recommended)
+### Option A: Local Development
 
-1. Ensure Docker Desktop is installed and running.
-2. From the project root, launch all 4 services:
-   ```bash
-   docker-compose up --build
-   ```
-3. Open your browser:
-   * **Frontend Application**: [http://localhost:5173](http://localhost:5173)
-   * **Backend REST API**: [http://localhost:5000](http://localhost:5000)
-
-### Option B: Local Development (`npm run dev`)
-
-The backend includes a dual-mode engine: it automatically connects to PostgreSQL and Redis when available, and provides a zero-setup embedded fallback when running locally without active services.
-
-1. **Start the Backend**:
+1. **Start Backend**:
    ```bash
    cd backend
    npm install
@@ -175,7 +212,7 @@ The backend includes a dual-mode engine: it automatically connects to PostgreSQL
    ```
    *Runs on `http://localhost:5000`*
 
-2. **Start the Frontend**:
+2. **Start Frontend**:
    ```bash
    cd frontend
    npm install
@@ -183,92 +220,59 @@ The backend includes a dual-mode engine: it automatically connects to PostgreSQL
    ```
    *Runs on `http://localhost:5173`*
 
+3. Open your browser at [http://localhost:5173](http://localhost:5173).
+
+### Option B: Using Docker Compose
+
+```bash
+docker-compose up --build
+```
+* **Frontend**: [http://localhost:5173](http://localhost:5173)
+* **Backend API**: [http://localhost:5000](http://localhost:5000)
+
 ---
 
-## 🎓 Teacher Demonstration Walkthrough (Steps 1–17)
+## 🧪 Running the Verification Test Suite
 
-Follow this step-by-step procedure to demonstrate the platform to evaluators:
+To run the comprehensive 23-step integration test verifying PostgreSQL connection, user registration, bcrypt password hashing, login, JWT verification, organization ownership data isolation between User A and User B, scoring, Redis caching, and dynamic PDF generation:
 
-1. **Step 1 — Open SustainIQ**: Navigate to [http://localhost:5173](http://localhost:5173). Observe the modern landing page detailing the ESG pillars and architectural stack without fake statistics.
-2. **Step 2 — Click Get Started**: Click the prominent **Get Started** button.
-3. **Step 3 — Create Organization 1**:
-   * Organization Name: `Apex Healthcare System`
-   * Type: Select `Hospital` (or test selecting `Other` to showcase custom type input)
-   * Location: `Boston, MA`
-   * Reporting Year: `2026`
-   * Click **Create Organization**.
-4. **Step 4 — Verify Initial Empty State**:
-   * The dashboard loads with: *"No ESG data available yet. Add your first ESG record to start monitoring your organization's sustainability performance."*
-   * All 7 KPI cards display `—` / `No data`.
-   * No hardcoded chart values appear.
-5. **Step 5 — Click Add ESG Record**: Click **+ Add ESG Record**.
-6. **Step 6 — Enter Month 1 Operational Data**:
-   * Date: `2026-01-01`
-   * Environmental: Energy: `48,000 kWh`, Water: `110,000 L`, Waste Gen: `7,500 kg`, Waste Recycled: `3,200 kg`, Carbon: `19,500 kg CO2e`, Renewable: `32%`
-   * Social: Workforce: `350`, Training: `750 hrs`, Safety Incidents: `0`, Community Initiatives: `2`
-   * Governance: Compliance: `98%`, Ethics Violations: `0`, Governance Score: `88`
-7. **Step 7 — Save Record**: Click **Save ESG Record**.
-8. **Step 8 — Observe Calculated Dashboard**:
-   * All 7 KPI cards instantly populate with mathematical totals.
-   * The Overall ESG Scorecard displays the computed score and sub-pillar breakdown.
-   * Click **"How is this calculated?"** to show the evaluator the exact formulas.
-9. **Step 9 — Observe Charts**:
-   * The 6 charts now show the initial data point for Jan 2026.
-10. **Step 10 — Add Month 2 Record**:
-    * Click **+ Add ESG Record**.
-    * Date: `2026-02-01`
-    * Energy: `42,000 kWh` (consumption reduced)
-    * Water: `95,000 L`
-    * Waste Gen: `7,000 kg`, Waste Recycled: `3,800 kg` (recycling increased)
-    * Carbon: `16,800 kg CO2e` (emissions decreased)
-    * Renewable: `42%` (green energy increased)
-    * Workforce: `360`, Training: `900 hrs`, Safety: `0`, Community: `3`
-    * Compliance: `99%`, Ethics: `0`, Governance: `90`
-    * Save record.
-11. **Step 11 — Observe Dynamic Trend Updating**:
-    * The 6 time-series charts immediately render multi-month trend curves.
-    * KPI cards display Month-over-Month (MoM) reduction percentages (e.g. Energy $-12.5\%$ MoM).
-12. **Step 12 — Edit an ESG Record**:
-    * Click **Edit** on a record. Change Waste Recycled from `3,800` to `4,200 kg`.
-    * Save and observe the recycling percentage and KPI cards update immediately.
-13. **Step 13 — Demonstrate Redis Invalidation**:
-    * Notice the Redis cache status pill in the top header displaying cache invalidation and subsequent hits.
-14. **Step 14 — Generate Dynamic PDF Report**:
-    * Navigate to **ESG Reports (PDF)**.
-    * Select period: `All Recorded History` or `Monthly`.
-    * Click **Generate & Download PDF Report**.
-    * Open the generated PDF: show that it contains the official SustainIQ banner, organization details, calculated scores, audit table, and automated analytical summary based exclusively on entered numbers.
-15. **Step 15 — Create Organization 2**:
-    * Click the organization dropdown in the header and select **+ Create Organization**.
-    * Name: `Horizon Financial Group`
-    * Type: `Bank`
-    * Location: `New York, NY`
-    * Year: `2026`
-    * Click **Create Organization**.
-16. **Step 16 — Switch Organization**:
-    * Switch between `Apex Healthcare System` and `Horizon Financial Group`.
-17. **Step 17 — Verify Multi-Tenant Isolation**:
-    * Notice that Horizon Financial Group has **zero records**, showing the empty state, while Apex Healthcare System retains its exact data and charts. Data is completely isolated per organization in PostgreSQL.
+```bash
+cd backend
+npx ts-node src/scripts/verifyIntegration.ts
+```
 
 ---
 
 ## 📡 REST API Reference
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Diagnostic system health, PostgreSQL status, and Redis cache telemetry |
-| `GET` | `/api/organizations` | Retrieve all registered organizations |
-| `POST` | `/api/organizations` | Create an organization profile |
-| `GET` | `/api/organizations/:id` | Get organization details by ID |
-| `PUT` | `/api/organizations/:id` | Update organization details (invalidates cache) |
-| `DELETE` | `/api/organizations/:id` | Delete organization (cascades records in PostgreSQL) |
-| `GET` | `/api/organizations/:id/dashboard` | Get calculated KPIs, scorecards, and charts (Redis cached) |
-| `GET` | `/api/organizations/:id/esg` | Retrieve all ESG records for an organization |
-| `POST` | `/api/organizations/:id/esg` | Insert an ESG record (recalculates scores & invalidates Redis cache) |
-| `GET` | `/api/esg/:id` | Get a specific ESG record |
-| `PUT` | `/api/esg/:id` | Update an ESG record (recalculates scores & invalidates Redis cache) |
-| `DELETE` | `/api/esg/:id` | Delete an ESG record (invalidates Redis cache) |
-| `GET` | `/api/organizations/:id/reports/pdf` | Stream dynamically generated vector PDF ESG report |
+### Authentication Endpoints (Public & Protected)
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/register` | Register new account (name, email, password) | No (Rate Limited) |
+| `POST` | `/api/auth/login` | Authenticate user & set secure HTTP-only cookie | No (Rate Limited) |
+| `POST` | `/api/auth/logout` | Clear authentication session cookie | Yes |
+| `GET` | `/api/auth/me` | Retrieve currently authenticated user profile | Yes |
+
+### Organizations & Dashboard Endpoints (Protected)
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/health` | System health, PostgreSQL status, Redis telemetry | No |
+| `GET` | `/api/organizations` | Retrieve authenticated user's organizations | Yes |
+| `POST` | `/api/organizations` | Create an organization profile (sets `owner_id`) | Yes |
+| `GET` | `/api/organizations/:id` | Get organization details (verifies ownership) | Yes |
+| `PUT` | `/api/organizations/:id` | Update organization details (invalidates cache) | Yes |
+| `DELETE` | `/api/organizations/:id` | Delete organization & cascade delete records | Yes |
+| `GET` | `/api/organizations/:id/dashboard` | Get KPIs & charts (Redis cached by user & org) | Yes |
+| `GET` | `/api/organizations/:id/reports/pdf` | Stream dynamic vector PDF ESG report | Yes |
+
+### ESG Records Endpoints (Protected)
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/organizations/:orgId/esg` | Retrieve records for an owned organization | Yes |
+| `POST` | `/api/organizations/:orgId/esg` | Add record (calculates scores & invalidates cache) | Yes |
+| `GET` | `/api/esg/:id` | Get single ESG record (verifies ownership) | Yes |
+| `PUT` | `/api/esg/:id` | Update ESG record (recalculates scores & cache) | Yes |
+| `DELETE` | `/api/esg/:id` | Delete ESG record (invalidates cache) | Yes |
 
 ---
 

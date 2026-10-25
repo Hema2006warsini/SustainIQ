@@ -81,3 +81,42 @@ export function validateESGRecord(req: Request, res: Response, next: NextFunctio
   req.body = result.data;
   next();
 }
+
+export const registerSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters long').max(100, 'Name cannot exceed 100 characters'),
+  email: z.string().trim().email('Please enter a valid email address').toLowerCase(),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters long')
+    .max(128, 'Password cannot exceed 128 characters'),
+});
+
+export const loginSchema = z.object({
+  email: z.string().trim().email('Please enter a valid email address').toLowerCase(),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export function validateRegister(req: Request, res: Response, next: NextFunction) {
+  const result = registerSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })),
+    });
+  }
+  req.body = result.data;
+  next();
+}
+
+export function validateLogin(req: Request, res: Response, next: NextFunction) {
+  const result = loginSchema.safeParse(req.body);
+  if (!result.success) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: result.error.errors.map(e => ({ field: e.path.join('.'), message: e.message })),
+    });
+  }
+  req.body = result.data;
+  next();
+}
+

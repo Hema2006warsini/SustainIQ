@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Organization } from '../types';
 import { api } from '../services/api';
+import { useAuth } from './AuthContext';
 
 interface OrganizationContextType {
   organizations: Organization[];
@@ -17,39 +18,53 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 const SELECTED_ORG_KEY = 'sustainiq_selected_org_id';
 
 export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { isAuthenticated, user } = useAuth();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const refreshOrganizations = async () => {
+    if (!isAuthenticated) {
+      setOrganizations([]);
+      setCurrentOrg(null);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
       const orgs = await api.getOrganizations();
       setOrganizations(orgs);
 
-      // Preserve previously selected org if valid
-      const savedId = localStorage.getItem(SELECTED_ORG_KEY);
+      // Preserve previously selected org if valid for this user
+      const savedId = localStorage.getItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`);
       if (savedId) {
         const found = orgs.find(o => o.id === savedId);
         if (found) {
           setCurrentOrg(found);
         } else if (orgs.length > 0) {
           setCurrentOrg(orgs[0]);
-          localStorage.setItem(SELECTED_ORG_KEY, orgs[0].id);
+          localStorage.setItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`, orgs[0].id);
         } else {
           setCurrentOrg(null);
-          localStorage.removeItem(SELECTED_ORG_KEY);
+          localStorage.removeItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`);
         }
       } else if (orgs.length > 0) {
         setCurrentOrg(orgs[0]);
-        localStorage.setItem(SELECTED_ORG_KEY, orgs[0].id);
+        localStorage.setItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`, orgs[0].id);
       } else {
         setCurrentOrg(null);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to load organizations');
+      // If 401 unauthenticated, clear gracefully
+      if (err.message?.includes('401') || err.message?.includes('Authentication')) {
+        setOrganizations([]);
+        setCurrentOrg(null);
+      } else {
+        setError(err.message || 'Failed to load organizations');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -59,22 +74,28 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     const found = organizations.find(o => o.id === id);
     if (found) {
       setCurrentOrg(found);
-      localStorage.setItem(SELECTED_ORG_KEY, found.id);
+      localStorage.setItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`, found.id);
     }
   };
 
   const handleSetCurrentOrg = (org: Organization | null) => {
     setCurrentOrg(org);
     if (org) {
-      localStorage.setItem(SELECTED_ORG_KEY, org.id);
+      localStorage.setItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`, org.id);
     } else {
-      localStorage.removeItem(SELECTED_ORG_KEY);
+      localStorage.removeItem(`${SELECTED_ORG_KEY}_${user?.id || 'current'}`);
     }
   };
 
+  // Re-fetch when authentication status or user ID changes
   useEffect(() => {
-    refreshOrganizations();
-  }, []);
+    if (isAuthenticated) {
+      refreshOrganizations();
+    } else {
+      setOrganizations([]);
+      setCurrentOrg(null);
+    }
+  }, [isAuthenticated, user?.id]);
 
   return (
     <OrganizationContext.Provider

@@ -4,8 +4,12 @@ import {
   Database, 
   Building2, 
   FileText, 
-  Home
+  Home,
+  LogOut,
+  User as UserIcon,
+  LogIn
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   currentPage: string;
@@ -13,13 +17,20 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => {
+  const { user, isAuthenticated, logout } = useAuth();
+
   const navItems = [
-    { id: 'landing', label: 'Welcome / Home', icon: Home },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'records', label: 'ESG Records', icon: Database },
-    { id: 'organizations', label: 'Organizations', icon: Building2 },
-    { id: 'reports', label: 'ESG Reports (PDF)', icon: FileText },
+    { id: 'landing', label: 'Welcome / Home', icon: Home, public: true },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, public: false },
+    { id: 'records', label: 'ESG Records', icon: Database, public: false },
+    { id: 'organizations', label: 'Organizations', icon: Building2, public: false },
+    { id: 'reports', label: 'ESG Reports (PDF)', icon: FileText, public: false },
   ];
+
+  const handleLogout = async () => {
+    await logout();
+    onNavigate('login');
+  };
 
   return (
     <aside 
@@ -81,25 +92,106 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
         );
       })}
 
-      {/* Footer Info Box */}
-      <div 
-        style={{ 
-          marginTop: 'auto', 
-          padding: '12px 14px', 
-          borderRadius: '10px', 
-          background: '#F8FAFC',
-          border: '1px solid #E2E8F0',
-          fontSize: '0.725rem',
-          color: '#64748B',
-        }}
-      >
-        <div style={{ fontWeight: 600, color: '#17201C', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#087F5B', display: 'inline-block' }}></span>
-          Verified ESG Telemetry
-        </div>
-        <p style={{ lineHeight: '1.4' }}>
-          Real-time metrics computed directly from database records.
-        </p>
+      {/* User Section / Logout at bottom */}
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {isAuthenticated && user ? (
+          <div
+            style={{
+              padding: '12px',
+              borderRadius: '10px',
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <div
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: '#EBF5F0',
+                  color: '#087F5B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  border: '1px solid rgba(8, 127, 91, 0.2)',
+                  flexShrink: 0,
+                }}
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#17201C', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.name}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user.email}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '7px 10px',
+                borderRadius: '6px',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                color: '#64748B',
+                fontSize: '0.775rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#FCA5A5';
+                e.currentTarget.style.color = '#DC2626';
+                e.currentTarget.style.backgroundColor = '#FEF2F2';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#CBD5E1';
+                e.currentTarget.style.color = '#64748B';
+                e.currentTarget.style.backgroundColor = '#FFFFFF';
+              }}
+            >
+              <LogOut size={14} />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: '12px',
+              borderRadius: '10px',
+              background: '#F8FAFC',
+              border: '1px solid #E2E8F0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+              Sign in to manage and report ESG metrics.
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('login')}
+              className="btn-primary"
+              style={{ width: '100%', fontSize: '0.8rem', padding: '7px' }}
+            >
+              <LogIn size={14} /> Sign In
+            </button>
+          </div>
+        )}
+
       </div>
     </aside>
   );
