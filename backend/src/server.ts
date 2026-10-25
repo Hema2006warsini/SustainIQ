@@ -83,8 +83,9 @@ async function startServer() {
     await initDatabase();
     initRedis();
 
-    app.listen(PORT, () => {
-      console.log(`🚀 SustainIQ Backend API running on http://localhost:${PORT}`);
+    const portNumber = Number(PORT) || 5000;
+    app.listen(portNumber, '0.0.0.0', () => {
+      console.log(`🚀 SustainIQ Backend API running on http://0.0.0.0:${portNumber}`);
       console.log(`📊 Zero-Seed Policy: Starting empty. Awaiting user input.`);
     });
   } catch (err) {

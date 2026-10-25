@@ -94,14 +94,20 @@ async function ensureTargetDatabase(targetUrlStr: string): Promise<void> {
 
 export async function initDatabase(): Promise<void> {
   try {
-    await startEmbeddedIfLocal(databaseUrl);
-    await ensureTargetDatabase(databaseUrl);
+    const isLocalhost = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (isLocalhost && !isProduction) {
+      await startEmbeddedIfLocal(databaseUrl);
+      await ensureTargetDatabase(databaseUrl);
+    }
 
     pool = new Pool({
       connectionString: databaseUrl,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
       max: 20,
       idleTimeoutMillis: 30000,
+      ssl: !isLocalhost || isProduction ? { rejectUnauthorized: false } : undefined,
     });
 
     pool.on('error', (err) => {
