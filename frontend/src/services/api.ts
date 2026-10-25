@@ -2,10 +2,36 @@ import { DashboardStats, ESGRecord, Organization, SystemHealth, User } from '../
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 
+const TOKEN_STORAGE_KEY = 'sustainiq_auth_token';
+
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors in restricted private browsing modes
+  }
+}
+
 // Helper to extract cookie by name
 function getCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
-  return match ? decodeURIComponent(match[3]) : null;
+  try {
+    const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
+    return match ? decodeURIComponent(match[3]) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Global session expiry listener
@@ -17,6 +43,7 @@ export function setUnauthorizedHandler(handler: () => void) {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
+    setStoredToken(null);
     if (onUnauthorizedHandler) {
       onUnauthorizedHandler();
     }
@@ -31,9 +58,13 @@ async function handleResponse<T>(res: Response): Promise<T> {
         if (body.details && Array.isArray(body.details)) {
           errorMsg += ': ' + body.details.map((d: any) => d.message).join(', ');
         }
+      } else if (body.message) {
+        errorMsg = body.message;
       }
     } catch {
-      // Use fallback errorMsg
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        errorMsg = 'The backend service is currently waking up or unavailable. Please wait a few moments and try again.';
+      }
     }
     throw new Error(errorMsg);
   }
@@ -47,6 +78,11 @@ function getHeaders(customHeaders: Record<string, string> = {}): Record<string, 
     ...customHeaders,
   };
 
+  const token = getStoredToken();
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const csrfToken = getCookie('csrfToken');
   if (csrfToken) {
     headers['X-CSRF-Token'] = csrfToken;
@@ -58,32 +94,58 @@ function getHeaders(customHeaders: Record<string, string> = {}): Record<string, 
 export const api = {
   // Authentication
   async register(data: { name: string; email: string; password: string }): Promise<{ user: User; token?: string }> {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: getHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(data),
-    });
-    return handleResponse<{ user: User; token?: string }>(res);
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ user: User; token?: string }>(res);
+      if (result.token) {
+        setStoredToken(result.token);
+      }
+      return result;
+    } catch (err: any) {
+      if (err.name === 'TypeError' && err.message?.includes('fetch')) {
+        throw new Error('Unable to connect to the backend server. The server may be waking up from sleep. Please try again in 30 seconds.');
+      }
+      throw err;
+    }
   },
 
   async login(data: { email: string; password: string }): Promise<{ user: User; token?: string }> {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: getHeaders(),
-      credentials: 'include',
-      body: JSON.stringify(data),
-    });
-    return handleResponse<{ user: User; token?: string }>(res);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      const result = await handleResponse<{ user: User; token?: string }>(res);
+      if (result.token) {
+        setStoredToken(result.token);
+      }
+      return result;
+    } catch (err: any) {
+      if (err.name === 'TypeError' && err.message?.includes('fetch')) {
+        throw new Error('Unable to connect to the backend server. The server may be waking up from sleep. Please try again in 30 seconds.');
+      }
+      throw err;
+    }
   },
 
   async logout(): Promise<{ message: string }> {
-    const res = await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      headers: getHeaders(),
-      credentials: 'include',
-    });
-    return handleResponse<{ message: string }>(res);
+    try {
+      const res = await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+      });
+      return await handleResponse<{ message: string }>(res);
+    } finally {
+      setStoredToken(null);
+    }
   },
 
   async getMe(): Promise<{ user: User }> {
@@ -198,6 +260,8 @@ export const api = {
     if (period) params.append('period', period);
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    const token = getStoredToken();
+    if (token) params.append('token', token);
     return `${API_BASE}/organizations/${orgId}/reports/pdf?${params.toString()}`;
   },
 

@@ -30,12 +30,16 @@ declare global {
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    // 1. Extract token from HTTP-only cookie or Authorization header
+    // 1. Extract token from HTTP-only cookie, Authorization header, or query param
     let token: string | undefined = req.cookies?.token;
     const isCookieAuth = Boolean(token);
 
     if (!token && req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token && typeof req.query?.token === 'string') {
+      token = req.query.token as string;
     }
 
     if (!token) {
